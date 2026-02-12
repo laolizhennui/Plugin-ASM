@@ -1,3 +1,5 @@
+# 中文
+
 # PASM—Plugin ASM
 
 **PASM** 是一个轻量级、Mixin 风格的字节码注入框架，专为 **Paper / Folia** 服务端设计。
@@ -230,4 +232,242 @@ Copyright © 2026 laolizhennui
 
 > **最后**——PASM 并不是要取代 Mixin，而是为 Paper 开发者提供一个**更简单、更符合直觉**的字节码注入选择。
 > 如果你喜欢它，请告诉你的朋友；如果你遇到问题，请告诉我们。
+> **Happy Coding!** 🎮🔧
+
+# English
+
+# PASM—Plugin ASM
+
+**PASM** is a lightweight, Mixin‑style bytecode injection framework designed specifically for **Paper / Folia** server environments.
+It allows you to modify the bytecode of arbitrary classes at runtime using simple annotations—**no reflection, no inheritance, zero performance penalty**.
+
+> 🎯 **Goal**: Let Bukkit/Paper plugin developers implement hot‑patches, API enhancements, event interceptors, and more—**just by writing plain Java, without touching complex ASM internals**.
+
+---
+
+## ✨ Core Features
+| Feature | Description |
+| --- | --- |
+| 🚀 Mixin‑style injection | @Pasm + @Inject define target class & method; the framework merges bytecode automatically. |
+| 🩸 Full injection types | BEFORE / AFTER / REPLACE / HEAD / TAIL (AROUND falls back to REPLACE with a warning). |
+| 🏗️ Constructor injection | Supports <init>; automatically inserted after super() call. |
+| 🔥 Exception‑handler compatibility | Full replication of try‑catch‑finally blocks; correct label mapping. |
+| 📏 Automatic wide‑type offset | long / double parameters are handled as double‑slots; no manual calculation of this offset. |
+| ⚔️ Exclusive REPLACE | If a method has multiple REPLACE injections, only the one with highest priority is applied. |
+| 🧩 ASM processor hooks | Declare asms array in pasm.json; implement PasmAsmProcessor interface to run custom bytecode operations before/after premain. |
+| 📦 Plugin‑style scanning | Place pasm.json in your plugin JAR root; PASM automatically discovers all injection points. |
+| 🔄 Hot‑reload (experimental) | Supports AgentManager.reloadPlugins(); dynamically rescans the plugin directory. |
+
+---
+
+## 📋 Environment Requirements
+- **Java 8–21**
+    
+- **Paper 1.17+**(for 1.16.5 or below, set `targetCompatibility` and `sourceCompatibility` to `JavaVersion.VERSION_1_8`)
+    
+- **Maven** or **Gradle**(only needed when compiling your plugin)
+
+---
+
+## 🔧 Quick Start(For Plugin Developers)
+
+### 1. Add Dependency(Gradle example)
+
+```gradle
+repositories {
+    maven {
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+    }
+}
+
+dependencies {
+    implementation "maven.modrinth:pasm:<latest Plugin ASM version>"
+}
+```
+
+### 2. Create a Mixin Class
+
+```java
+package com.example.mixin;
+
+import net.laoli.pasm.annotation.Inject;
+import net.laoli.pasm.annotation.InjectionType;
+import net.laoli.pasm.annotation.Pasm;
+import org.bukkit.entity.Player;
+import org.bukkit.event.player.PlayerJoinEvent;
+import net.kyori.adventure.text.Component;
+
+@Pasm("org.bukkit.event.player.PlayerJoinEvent")
+public class PlayerJoinMixin {
+
+    @Inject(
+        name = "<init>",
+        desc = "(Lorg/bukkit/entity/Player;Lnet/kyori/adventure/text/Component;)V",
+        type = InjectionType.HEAD,
+        priority = 10
+    )
+    public static void onConstruct(Player player, Component joinMessage) {
+        System.out.println("PlayerJoinEvent is being constructed, player: " + player.getName());
+    }
+}
+```
+
+### 3. Write `pasm.json`(place it in `src/main/resources/`)
+
+```json
+{
+  "pasms": [
+    "com.example.mixin.PlayerJoinMixin"
+  ]
+}
+```
+
+### 4. Build Your Plugin and Drop It into `plugins/` Folder
+
+### 5. Start the Server(Attach PASM Agent)
+
+```bash
+java -javaagent:/path/to/pasm-1.0.0-alpha.jar=debug -jar paper-1.xx.x-xx.jar
+```
+
+✅ Now every time a player joins, you’ll see the custom message in the console—**without modifying the server code**.
+
+---
+
+## 📖 In‑Depth Guide
+
+### 🏷️ Annotation Reference
+
+#### `@Pasm`(class‑level)
+- `value`: fully qualified name of the target class(e.g. `org.bukkit.entity.Player`)
+    
+- `internalName`(optional): directly specify the internal name, e.g. `org/bukkit/entity/Player`; automatically converted if omitted.
+
+#### `@Inject`(method‑level)
+- `name`: name of the target method(`<init>` for constructors)
+    
+- `desc`: method descriptor of the target method(use `javap -s` or an ASM plugin to obtain it)
+    
+- `type`: injection type(`InjectionType`)
+    
+- `priority`: priority value; **lower value means higher priority**.
+    For `REPLACE`, only the highest‑priority injector takes effect; for non‑`REPLACE`     types, all injectors are executed in priority order.
+
+### 🎨 Injection Type Comparison
+| Type | Behavior | Typical Use Case |
+| --- | --- | --- |
+| BEFORE | Injected before the first instruction of the target method. | Pre‑checks, logging, parameter tweaking |
+| AFTER | Injected before every return; can read/save the return value. | Post‑processing, statistics |
+| REPLACE | Completely replaces the body of the target method. | Full method logic rewrite |
+| HEAD | Same as BEFORE, but special‑cased for constructors (injected after super()). | Constructor enhancement |
+| TAIL | Alias for AFTER. | - |
+| AROUND | Not yet implemented; falls back to REPLACE (with a warning). | - |
+
+### 🧠 ASM Processor Hooks(Advanced)
+
+If you need to run your own `ClassFileTransformer` or other JVM‑level operations **before or after PASM performs its bytecode transformations**, you can declare processor classes via the `asms` array.
+
+**1. Implement the `PasmAsmProcessor` interface**
+
+```java
+package com.example.hook;
+
+import net.laoli.pasm.api.PasmAsmProcessor;
+import java.lang.instrument.Instrumentation;
+
+public class CustomTransformer implements PasmAsmProcessor {
+
+    @Override
+    public void beforeInject(Instrumentation inst) {
+        System.out.println("[PASM] Custom beforeInject executed, priority 5");
+        inst.addTransformer(new MyClassFileTransformer(), true);
+    }
+
+    @Override
+    public void afterInject(Instrumentation inst) {
+        System.out.println("[PASM] Custom afterInject executed");
+    }
+}
+```
+
+**2. Add the `asms` array to your `pasm.json`**
+
+```json
+{
+  "pasms": [...],
+  "asms": [
+    { "class": "com.example.hook.CustomTransformer", "priority": 5 },
+    { "class": "com.example.hook.AnotherTransformer", "priority": 10 }
+  ]
+}
+```
+
+> 💡 **Priority**: lower value → earlier execution(same rule as `@Inject`).
+> 💡 You can configure `asms` even without any `pasms`–useful for registering global transformers alone.
+
+---
+
+## 🧪 Testing & Compatibility
+
+PASM has been fully tested in the following scenarios:
+- ✅ BEFORE, AFTER, REPLACE, HEAD, TAIL–all types covered
+    
+- ✅ Constructor(`<init>`) injection
+    
+- ✅ Methods containing `try‑catch‑finally` blocks
+    
+- ✅ Methods with `long` / `double` parameters(static → non‑static, static → static)
+    
+- ✅ Conflict detection for multiple `REPLACE` injectors on the same method(only the highest priority runs)
+    
+- ✅ Configuration with `asms` only(no `pasms`)
+    
+- ✅ Paper 1.21.11 / Java 21
+
+**Known limitations**(to be improved in future versions):
+- `AROUND` injection is not yet implemented; using it will fall back to `REPLACE` and emit a warning.
+    
+- Hot‑reload is experimental and **not recommended for production**.
+    
+- Native methods and abstract methods cannot be modified.
+
+---
+
+## 📦 How to Build PASM Itself(Framework Maintainers Only)
+
+```bash
+git clone https://github.com/laolizhennui/Plugin-ASM.git
+cd Plugin-ASM
+mvn clean package
+```
+
+Output artifact: `target/pasm-1.0.0-alpha.jar`—this is the Java Agent.
+
+---
+
+## 🤝 Contributing
+
+PASM is still a young project, and contributions of any form are welcome!
+You can:
+- Submit an issue: report bugs or suggest new features
+    
+- Pull Request: fix code, improve documentation
+    
+- Share your use cases
+
+**We look forward to your Star ⭐ and Fork 🍴!**
+
+---
+
+## 📄 License
+
+[LGPL License](https://www.gnu.org/licenses/old-licenses/lgpl-2.1)
+
+Copyright © 2026 laolizhennui
+
+---
+
+> **Finally**—PASM is not meant to replace Mixin, but to offer Paper developers **a simpler, more intuitive choice** for bytecode injection.
+> If you like it, tell your friends; if you encounter problems, tell us.
 > **Happy Coding!** 🎮🔧

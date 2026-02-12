@@ -1,0 +1,49 @@
+plugins {
+    id 'java'
+}
+
+group = 'net.laoli.pasm'
+version = '0.1.0-alpha1'
+
+repositories {
+    mavenCentral()
+    maven {
+        name = "papermc-repo"
+        url = "https://repo.papermc.io/repository/maven-public/"
+    }
+}
+
+dependencies {
+    implementation 'org.ow2.asm:asm:9.9.1'
+    implementation 'org.ow2.asm:asm-tree:9.9.1'
+    implementation 'org.ow2.asm:asm-commons:9.9.1'
+    implementation 'com.google.code.gson:gson:2.13.2'
+}
+
+jar {
+    manifest {
+        attributes(
+                'Premain-Class': "net.laoli.pasm.RedefineAgent",
+                'Agent-Class': "net.laoli.pasm.RedefineAgent",
+                'Can-Redefine-Classes': 'true',
+                'Can-Retransform-Classes': 'true',
+                'Can-Set-Native-Method-Prefix': 'true',
+                'Implementation-Title': 'My ASM Agent',
+                'Implementation-Version': project.version
+        )
+    }
+
+    // 将依赖打包到 JAR 中
+    from {
+        configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) }
+    }
+
+    // 避免重复的 META-INF 文件
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF', 'META-INF/*.DSA'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
+}

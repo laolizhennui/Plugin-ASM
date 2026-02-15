@@ -8,8 +8,9 @@ import java.util.Map;
 
 /**
  * PASM (Plugin ASM) - Java Agent 主入口
+ * @author laoli
  */
-public class RedefineAgent {
+public class PasmAgent {
 
     private static volatile AgentManager agentManager;
 
@@ -33,14 +34,13 @@ public class RedefineAgent {
 
             // 初始化Agent管理器
             agentManager = new AgentManager();
-            agentManager.initialize(inst, args);
+            agentManager.initialize(inst);
 
             PrintUtils.always("PASM Agent 启动完成");
 
         } catch (Throwable t) {
             PrintUtils.error("PASM Agent 启动失败: " + t.getMessage());
             t.printStackTrace();
-            // 不抛出异常，让应用正常启动
         }
     }
 

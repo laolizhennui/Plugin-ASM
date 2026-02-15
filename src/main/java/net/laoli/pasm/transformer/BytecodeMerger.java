@@ -35,14 +35,30 @@ public class BytecodeMerger {
             }
 
             // 根据注入类型进行合并
-            return switch (injectionInfo.getType()) {
-                case BEFORE -> mergeBefore(targetMethod, sourceMethod);
-                case AFTER -> mergeAfter(targetMethod, sourceMethod);
-                case REPLACE -> mergeReplace(targetMethod, sourceMethod);
-                case HEAD -> mergeHead(targetMethod, sourceMethod);
-                case TAIL -> mergeTail(targetMethod, sourceMethod);
-                case AROUND -> mergeAround(targetMethod, sourceMethod);
-            };
+            boolean result;
+            switch (injectionInfo.getType()) {
+                case BEFORE:
+                    result = mergeBefore(targetMethod, sourceMethod);
+                    break;
+                case AFTER:
+                    result = mergeAfter(targetMethod, sourceMethod);
+                    break;
+                case REPLACE:
+                    result = mergeReplace(targetMethod, sourceMethod);
+                    break;
+                case HEAD:
+                    result = mergeHead(targetMethod, sourceMethod);
+                    break;
+                case TAIL:
+                    result = mergeTail(targetMethod, sourceMethod);
+                    break;
+                case AROUND:
+                    result = mergeAround(targetMethod, sourceMethod);
+                    break;
+                default:
+                    throw new IllegalArgumentException("Unexpected type: " + injectionInfo.getType());
+            }
+            return result;
 
         } catch (Exception e) {
             PrintUtils.error("合并方法体失败: " + e.getMessage());
@@ -129,7 +145,8 @@ public class BytecodeMerger {
                 // 3. 恢复返回值并返回
                 int loadOpcode = Opcodes.ALOAD;
                 switch (returnType.getSort()) {
-                    case Type.VOID: break;
+                    case Type.VOID:
+                        break;
                     case Type.BOOLEAN:
                     case Type.CHAR:
                     case Type.BYTE:
@@ -147,9 +164,7 @@ public class BytecodeMerger {
                         loadOpcode = Opcodes.DLOAD;
                         break;
                 }
-                if (!isVoid) {
-                    injectBlock.add(new VarInsnNode(loadOpcode, tmpVar));
-                }
+                injectBlock.add(new VarInsnNode(loadOpcode, tmpVar));
                 // 保留原有的return指令，无需添加
             } else {
                 // void方法：直接插入源方法指令
@@ -193,14 +208,13 @@ public class BytecodeMerger {
 
             // 复制异常处理表
             if (sourceMethod.tryCatchBlocks != null) {
-                for (Object obj : sourceMethod.tryCatchBlocks) {
-                    TryCatchBlockNode tcbn = (TryCatchBlockNode) obj;
-                    LabelNode start = labelMap.get(tcbn.start);
-                    LabelNode end = labelMap.get(tcbn.end);
-                    LabelNode handler = labelMap.get(tcbn.handler);
+                for (TryCatchBlockNode obj : sourceMethod.tryCatchBlocks) {
+                    LabelNode start = labelMap.get(obj.start);
+                    LabelNode end = labelMap.get(obj.end);
+                    LabelNode handler = labelMap.get(obj.handler);
                     if (start != null && end != null && handler != null) {
                         targetMethod.tryCatchBlocks.add(
-                                new TryCatchBlockNode(start, end, handler, tcbn.type));
+                                new TryCatchBlockNode(start, end, handler, obj.type));
                     } else {
                         PrintUtils.warn("异常表标签映射丢失，跳过该异常块");
                     }
@@ -319,6 +333,7 @@ public class BytecodeMerger {
 
     /**
      * 确保方法包含返回指令，如果没有则添加默认返回值
+     *
      * @param method 目标方法节点
      */
     private static void ensureReturnInstruction(MethodNode method) {

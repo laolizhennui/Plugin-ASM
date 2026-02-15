@@ -4,7 +4,6 @@ import net.laoli.pasm.processor.InjectionProcessor;
 import net.laoli.pasm.utils.PrintUtils;
 
 import java.lang.instrument.ClassFileTransformer;
-import java.lang.instrument.IllegalClassFormatException;
 import java.security.ProtectionDomain;
 import java.util.*;
 
@@ -21,44 +20,12 @@ public class ClassTransformer implements ClassFileTransformer {
         this.injectionProcessor = processor;
     }
 
-    /**
-     * 检查是否是被排除的类
-     */
-    private boolean isExcludedClass(String className) {
-        // 排除Java标准库
-        return className.startsWith("java/") ||
-                className.startsWith("javax/") ||
-                className.startsWith("sun/") ||
-                className.startsWith("com/sun/") ||
-                className.startsWith("net/laoli/pasm/") ||
-                className.startsWith("[") ||
-                className.length() == 1;
-    }
-
-    /**
-     * 添加排除的类前缀
-     */
-    public void addExcludedClass(String classPrefix) {
-        PrintUtils.debug("添加排除类前缀: " + classPrefix);
-        // 注意：这里简化的实现中没有保存排除列表
-        // 实际实现应该保存到一个集合中
-    }
-
-    /**
-     * 设置是否启用缓存
-     */
-    public void setEnableCaching(boolean enable) {
-        PrintUtils.debug("设置缓存: " + enable);
-        // 这里简化的实现中没有缓存机制
-        // 实际实现可以添加缓存逻辑
-    }
-
     @Override
     public byte[] transform(ClassLoader loader,
                             String internalClassName,
                             Class<?> classBeingRedefined,
                             ProtectionDomain protectionDomain,
-                            byte[] originalClassfileBuffer) throws IllegalClassFormatException {
+                            byte[] originalClassfileBuffer) {
 
         // 基本检查...
         if (internalClassName == null || internalClassName.isEmpty() || loader == null) {
@@ -66,7 +33,13 @@ public class ClassTransformer implements ClassFileTransformer {
         }
 
         // 排除系统类...
-        if (isExcludedClass(internalClassName)) {
+        if (internalClassName.startsWith("java/") ||
+                internalClassName.startsWith("javax/") ||
+                internalClassName.startsWith("sun/") ||
+                internalClassName.startsWith("com/sun/") ||
+                internalClassName.startsWith("net/laoli/pasm/") ||
+                internalClassName.startsWith("[") ||
+                internalClassName.length() == 1) {
             return null;
         }
 
@@ -75,7 +48,7 @@ public class ClassTransformer implements ClassFileTransformer {
             return null;
         }
 
-        PrintUtils.debug("Mixin转换类: " + internalClassName);
+        PrintUtils.debug("转换类: " + internalClassName);
 
         try {
             // 获取注入信息
@@ -87,17 +60,16 @@ public class ClassTransformer implements ClassFileTransformer {
             }
 
             // 使用MixinTransformer进行转换
-            byte[] transformedBytes = MixinTransformer.transformClass(
+
+            return MixinTransformer.transformClass(
                     originalClassfileBuffer,
                     internalClassName,
                     injections,
                     loader
             );
 
-            return transformedBytes;
-
         } catch (Exception e) {
-            PrintUtils.error("Mixin转换失败: " + internalClassName + " - " + e.getMessage());
+            PrintUtils.error("转换失败: " + internalClassName + " - " + e.getMessage());
             return originalClassfileBuffer;
         }
     }

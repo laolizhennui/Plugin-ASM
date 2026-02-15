@@ -3,7 +3,7 @@ plugins {
 }
 
 group = 'net.laoli.pasm'
-version = '0.1.0-alpha1'
+version = '0.1.0-alpha2'
 
 repositories {
     mavenCentral()
@@ -23,8 +23,8 @@ dependencies {
 jar {
     manifest {
         attributes(
-                'Premain-Class': "net.laoli.pasm.RedefineAgent",
-                'Agent-Class': "net.laoli.pasm.RedefineAgent",
+                'Premain-Class': "net.laoli.pasm.PasmAgent",
+                'Agent-Class': "net.laoli.pasm.PasmAgent",
                 'Can-Redefine-Classes': 'true',
                 'Can-Retransform-Classes': 'true',
                 'Can-Set-Native-Method-Prefix': 'true',
@@ -44,6 +44,6 @@ jar {
 }
 
 java {
-    sourceCompatibility = JavaVersion.VERSION_21
-    targetCompatibility = JavaVersion.VERSION_21
+    sourceCompatibility = JavaVersion.VERSION_1_8
+    targetCompatibility = JavaVersion.VERSION_1_8
 }

@@ -10,6 +10,7 @@ import java.util.*;
 
 /**
  * 注解处理器 - 负责协调扫描和处理过程
+ * @author laoli
  */
 public class InjectionProcessor {
     private List<AsmProcessorInfo> globalAsmProcessors;

@@ -2,23 +2,27 @@ package net.laoli.pasm.agent;
 
 import net.laoli.pasm.api.PasmAsmProcessor;
 import net.laoli.pasm.model.AsmProcessorInfo;
+import net.laoli.pasm.model.InjectionInfo;
 import net.laoli.pasm.processor.InjectionProcessor;
 import net.laoli.pasm.scanner.PluginScanner;
 import net.laoli.pasm.transformer.ClassTransformer;
 import net.laoli.pasm.utils.PrintUtils;
+
 import java.lang.instrument.Instrumentation;
-import java.lang.reflect.Method;
+import java.lang.instrument.UnmodifiableClassException;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
  * 极简Agent管理器
+ * @author laoli
  */
 public class AgentManager {
-
     private final InjectionProcessor injectionProcessor;
     private final ClassTransformer classTransformer;
     private boolean initialized;
+    private Instrumentation inst;
 
     public AgentManager() {
         this.injectionProcessor = InjectionProcessor.getInstance();
@@ -29,7 +33,7 @@ public class AgentManager {
     /**
      * 初始化Agent
      */
-    public void initialize(Instrumentation inst, Map<String, String> args) {
+    public void initialize(Instrumentation inst) {
         if (initialized) {
             PrintUtils.debug("Agent已经初始化，跳过...");
             return;
@@ -37,8 +41,7 @@ public class AgentManager {
 
         PrintUtils.separator("初始化PASM Agent");
 
-        // 应用配置参数
-        applyConfiguration(args);
+        this.inst = inst;
 
         // 初始化注解处理器
         PrintUtils.info("扫描插件...");
@@ -65,33 +68,7 @@ public class AgentManager {
     }
 
     /**
-     * 应用配置参数
-     */
-    private void applyConfiguration(Map<String, String> args) {
-        // 调试模式已经在RedefineAgent中设置
-        PrintUtils.debug("应用配置参数: " + args);
-
-        // 这里可以添加更多配置参数的处理
-        for (Map.Entry<String, String> entry : args.entrySet()) {
-            String key = entry.getKey();
-            String value = entry.getValue();
-
-            switch (key) {
-                case "exclude":
-                    classTransformer.addExcludedClass(value.replace('.', '/'));
-                    PrintUtils.debug("添加排除类: " + value);
-                    break;
-                case "cache":
-                    classTransformer.setEnableCaching(Boolean.parseBoolean(value));
-                    PrintUtils.debug("设置缓存: " + value);
-                    break;
-                // 可以添加更多配置参数
-            }
-        }
-    }
-
-    /**
-     * 重新加载插件
+     * 重新加载插件（完全热重载）
      */
     public void reload() {
         if (!initialized) {
@@ -99,16 +76,56 @@ public class AgentManager {
             return;
         }
 
-        PrintUtils.separator("重新加载插件");
+        PrintUtils.separator("重新加载插件（完全热重载）");
+
+        // 1. 重新扫描插件，更新注入信息
         injectionProcessor.reload();
+
+        // 2. 找出所有已加载的、受影响的类
+        List<Class<?>> affectedClasses = findAffectedClasses();
+
+        if (affectedClasses.isEmpty()) {
+            PrintUtils.info("没有需要重转换的类");
+        } else {
+            PrintUtils.info("发现 " + affectedClasses.size() + " 个需要重转换的类，正在执行...");
+            try {
+                inst.retransformClasses(affectedClasses.toArray(new Class[0]));
+                PrintUtils.info("重转换完成");
+            } catch (UnmodifiableClassException e) {
+                PrintUtils.error("重转换失败: " + e.getMessage());
+                e.printStackTrace();
+            } catch (Throwable t) {
+                PrintUtils.error("重转换时发生意外错误: " + t.getMessage());
+                t.printStackTrace();
+            }
+        }
+
         PrintUtils.info("插件重新加载完成");
+    }
+
+    /**
+     * 找出所有受插件更新影响的已加载类
+     * （简单实现：遍历所有已加载类，检查是否有注入信息）
+     */
+    private List<Class<?>> findAffectedClasses() {
+        List<Class<?>> affected = new ArrayList<>();
+        if (inst == null) return affected;
+
+        Class<?>[] allLoaded = inst.getAllLoadedClasses();
+        for (Class<?> clazz : allLoaded) {
+            String internalName = clazz.getName().replace('.', '/');
+            if (injectionProcessor.hasInjectionsForClass(internalName)) {
+                affected.add(clazz);
+            }
+        }
+        return affected;
     }
 
     /**
      * 打印统计信息
      */
     private void printStats() {
-        var allInjections = injectionProcessor.getAllInjectionsByTarget();
+        Map<String, List<InjectionInfo>> allInjections = injectionProcessor.getAllInjectionsByTarget();
         int totalInjections = allInjections.values().stream()
                 .mapToInt(java.util.List::size)
                 .sum();
@@ -140,11 +157,11 @@ public class AgentManager {
     private void invokeAsmProcessors(List<AsmProcessorInfo> processors,
                                      Instrumentation inst,
                                      boolean isBefore) {
+        final ClassLoader classLoader = PluginScanner.getInjectionClassLoader();
         for (AsmProcessorInfo info : processors) {
             String className = info.getClassName();
             try {
-                Class<?> clazz = Class.forName(className, true,
-                        PluginScanner.getInjectionClassLoader());
+                Class<?> clazz = Class.forName(className, true, classLoader);
                 // 必须有无参构造器
                 PasmAsmProcessor processor = (PasmAsmProcessor) clazz.getDeclaredConstructor().newInstance();
                 if (isBefore) {

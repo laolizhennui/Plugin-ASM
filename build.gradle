@@ -3,21 +3,18 @@ plugins {
 }
 
 group = 'net.laoli.pasm'
-version = '0.1.0-alpha2'
+version = '0.1.0-alpha3'
 
 repositories {
     mavenCentral()
-    maven {
-        name = "papermc-repo"
-        url = "https://repo.papermc.io/repository/maven-public/"
-    }
 }
 
 dependencies {
     implementation 'org.ow2.asm:asm:9.9.1'
     implementation 'org.ow2.asm:asm-tree:9.9.1'
     implementation 'org.ow2.asm:asm-commons:9.9.1'
-    implementation 'com.google.code.gson:gson:2.13.2'
+    implementation 'com.google.code.gson:gson:2.8.9'
+    implementation 'com.google.guava:guava:33.5.0-jre'
 }
 
 jar {

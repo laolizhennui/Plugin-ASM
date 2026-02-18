@@ -8,6 +8,7 @@ import java.util.*;
 /**
  * 注解扫描器 - 专门处理@Inject注解的验证和分组
  * 注意：现在扫描逻辑已迁移到PluginScanner中，此类主要用于验证和工具方法
+ * @author laoli
  */
 public class AnnotationScanner {
 

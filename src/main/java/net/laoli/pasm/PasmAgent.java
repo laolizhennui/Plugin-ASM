@@ -1,9 +1,10 @@
 package net.laoli.pasm;
 
+import com.google.common.base.Splitter;
+import com.google.common.collect.Maps;
 import net.laoli.pasm.agent.AgentManager;
 import net.laoli.pasm.utils.PrintUtils;
 import java.lang.instrument.Instrumentation;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -32,8 +33,20 @@ public class PasmAgent {
                 PrintUtils.always("PASM Agent 启动中...");
             }
 
-            // 初始化Agent管理器
-            agentManager = new AgentManager();
+            // 初始化Agent管理器（双重检查锁定模式确保线程安全）
+            if (agentManager == null) {
+                synchronized (PasmAgent.class) {
+                    if (agentManager == null) {
+                        agentManager = new AgentManager();
+                        if (agentManager == null) {
+                            throw new IllegalStateException("AgentManager初始化失败");
+                        }
+                    }
+                }
+            }
+            if (agentManager == null) {
+                throw new IllegalStateException("AgentManager未初始化");
+            }
             agentManager.initialize(inst);
 
             PrintUtils.always("PASM Agent 启动完成");
@@ -54,39 +67,28 @@ public class PasmAgent {
 
     /**
      * 解析Agent参数
-     * 格式: key1=value1,key2=value2 或 debug=true
+     * 格式: key1=value1,key2=value2 或 debug=true 或 debug
      */
     private static Map<String, String> parseAgentArgs(String agentArgs) {
-        Map<String, String> args = new HashMap<>();
-
         if (agentArgs == null || agentArgs.trim().isEmpty()) {
-            return args;
+            return Maps.newHashMap();
         }
-
-        PrintUtils.debug("原始Agent参数: " + agentArgs);
-
-        // 处理简单格式: "debug" 或 "debug=true"
-        if (agentArgs.contains("=")) {
-            // 格式: key=value,key2=value2
-            String[] pairs = agentArgs.split(",");
-            for (String pair : pairs) {
-                String[] kv = pair.split("=", 2);
-                if (kv.length == 2) {
-                    args.put(kv[0].trim().toLowerCase(), kv[1].trim());
-                } else if (kv.length == 1) {
-                    // 单个值，认为是debug标志
-                    args.put("debug", Boolean.toString(Boolean.parseBoolean(kv[0].trim())));
-                }
+        Map<String, String> result = Maps.newHashMap();
+        // 按逗号分割参数
+        for (String arg : Splitter.on(',').omitEmptyStrings().trimResults().split(agentArgs)) {
+            if (arg.contains("=")) {
+                // 处理 key=value 格式
+                String[] parts = arg.split("=", 2);
+                String key = parts[0].trim().toLowerCase();
+                String value = parts[1].trim();
+                result.put(key, value);
+            } else {
+                // 处理只有键没有值的情况，默认值为true
+                String key = arg.trim().toLowerCase();
+                result.put(key, "true");
             }
-        } else {
-            // 简单标志: "debug" 或 "true"
-            boolean debug = Boolean.parseBoolean(agentArgs) ||
-                    "debug".equalsIgnoreCase(agentArgs);
-            args.put("debug", Boolean.toString(debug));
         }
-
-        PrintUtils.debug("解析后的参数: " + args);
-        return args;
+        return result;
     }
 
     /**

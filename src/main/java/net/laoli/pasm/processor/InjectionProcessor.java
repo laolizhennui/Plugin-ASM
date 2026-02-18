@@ -66,6 +66,9 @@ public class InjectionProcessor {
         initialized = false;
         injectionsByTarget.clear();
         injectionsByPoint.clear();
+        if (globalAsmProcessors != null) {
+            globalAsmProcessors.clear();
+        }
         initialize();
     }
 

@@ -10,19 +10,11 @@ import java.util.List;
 
 /**
  * 统一的类加载器 - 既能加载插件类，也能看到目标类
+ * @author laoli
  */
 public class InjectionClassLoader extends URLClassLoader {
-
-    private final List<String> allowedPackages = new ArrayList<>();
-    private final List<String> excludedPackages = new ArrayList<>();
-
     public InjectionClassLoader(ClassLoader parent) {
         super(new URL[0], parent);
-
-        // 默认允许的包
-        allowedPackages.add("net.laoli.pasm.");
-        allowedPackages.add("java.");
-        allowedPackages.add("javax.");
     }
 
     /**
@@ -31,27 +23,6 @@ public class InjectionClassLoader extends URLClassLoader {
     public void addPluginJar(File jarFile) throws Exception {
         addURL(jarFile.toURI().toURL());
         PrintUtils.debug("添加插件到类路径: " + jarFile.getName());
-    }
-
-    /**
-     * 添加目录到类路径
-     */
-    public void addDirectory(File directory) throws Exception {
-        addURL(directory.toURI().toURL());
-    }
-
-    /**
-     * 允许指定的包前缀
-     */
-    public void allowPackage(String packagePrefix) {
-        allowedPackages.add(packagePrefix);
-    }
-
-    /**
-     * 排除指定的包前缀
-     */
-    public void excludePackage(String packagePrefix) {
-        excludedPackages.add(packagePrefix);
     }
 
     @Override
@@ -95,13 +66,5 @@ public class InjectionClassLoader extends URLClassLoader {
         }
     }
 
-    @Override
-    protected Class<?> findClass(String name) throws ClassNotFoundException {
-        try {
-            return super.findClass(name);
-        } catch (ClassNotFoundException e) {
-            PrintUtils.debug("类加载器无法找到类: " + name);
-            throw e;
-        }
-    }
+
 }

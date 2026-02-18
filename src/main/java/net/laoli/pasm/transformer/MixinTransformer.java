@@ -8,6 +8,9 @@ import org.objectweb.asm.tree.*;
 
 import java.util.*;
 
+/**
+ * @author laoli
+ */
 public class MixinTransformer {
 
     public static byte[] transformClass(byte[] originalBytes,
@@ -155,8 +158,14 @@ public class MixinTransformer {
                     c2 = Class.forName(type2Name, false, classLoader);
                 } catch (ClassNotFoundException e) {
                     // 回退到系统类加载器
-                    c1 = Class.forName(type1Name, false, ClassLoader.getSystemClassLoader());
-                    c2 = Class.forName(type2Name, false, ClassLoader.getSystemClassLoader());
+                    try {
+                        c1 = Class.forName(type1Name, false, ClassLoader.getSystemClassLoader());
+                        c2 = Class.forName(type2Name, false, ClassLoader.getSystemClassLoader());
+                    } catch (ClassNotFoundException ex) {
+                        // 系统类加载器也找不到，返回默认值
+                        PrintUtils.warn("无法加载类计算共同超类: " + type1 + ", " + type2 + ", 返回默认值 java/lang/Object");
+                        return "java/lang/Object";
+                    }
                 }
 
                 if (c1.isAssignableFrom(c2)) {
@@ -171,12 +180,18 @@ public class MixinTransformer {
                     Class<?> c = c1;
                     while (!c.isAssignableFrom(c2)) {
                         c = c.getSuperclass();
+                        if (c == null) {
+                            // 无法找到共同超类，返回默认值
+                            PrintUtils.warn("无法找到共同超类: " + type1 + ", " + type2 + ", 返回默认值 java/lang/Object");
+                            return "java/lang/Object";
+                        }
                     }
                     return c.getName().replace('.', '/');
                 }
             } catch (Exception e) {
-                // 关键修复：抛出运行时异常，明确告知无法计算共同超类
-                throw new RuntimeException("无法计算共同超类: " + type1 + ", " + type2, e);
+                // 其他异常，返回默认值
+                PrintUtils.warn("计算共同超类时发生异常: " + type1 + ", " + type2 + ", 返回默认值 java/lang/Object");
+                return "java/lang/Object";
             }
         }
     }

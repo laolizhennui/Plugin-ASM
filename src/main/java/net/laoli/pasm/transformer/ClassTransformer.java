@@ -60,7 +60,6 @@ public class ClassTransformer implements ClassFileTransformer {
             }
 
             // 使用MixinTransformer进行转换
-
             return MixinTransformer.transformClass(
                     originalClassfileBuffer,
                     internalClassName,
@@ -70,6 +69,12 @@ public class ClassTransformer implements ClassFileTransformer {
 
         } catch (Exception e) {
             PrintUtils.error("转换失败: " + internalClassName + " - " + e.getMessage());
+            e.printStackTrace();
+            return originalClassfileBuffer;
+        } catch (Throwable t) {
+            // 捕获所有异常，包括Error，确保不会导致JVM崩溃
+            PrintUtils.error("转换发生严重错误: " + internalClassName + " - " + t.getMessage());
+            t.printStackTrace();
             return originalClassfileBuffer;
         }
     }

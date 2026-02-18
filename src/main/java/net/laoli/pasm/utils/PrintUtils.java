@@ -2,6 +2,8 @@ package net.laoli.pasm.utils;
 
 /**
  * 日志工具类 - 支持不同日志级别
+ *
+ * @author laoli
  */
 public class PrintUtils {
     private PrintUtils() {
@@ -19,14 +21,6 @@ public class PrintUtils {
     private static Level currentLevel = Level.INFO;
     // 是否启用调试模式
     private static boolean debugEnabled = false;
-
-    /**
-     * 设置日志级别
-     */
-    public static void setLevel(Level level) {
-        currentLevel = level;
-        debugEnabled = (level == Level.DEBUG);
-    }
 
     /**
      * 设置调试模式

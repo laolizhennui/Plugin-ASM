@@ -1,5 +1,6 @@
 package net.laoli.pasm.injector;
 
+import com.google.common.io.ByteStreams;
 import net.laoli.pasm.annotation.InjectionType;
 import net.laoli.pasm.model.InjectionInfo;
 import net.laoli.pasm.scanner.PluginScanner;
@@ -13,10 +14,11 @@ import java.util.*;
 
 /**
  * 方法注入器 - Mixin风格，使用方法体复制
+ * @author laoli
  */
 public class MethodInjector {
 
-    private static final InjectionClassLoader classLoader =
+    private static final InjectionClassLoader CLASS_LOADER =
             PluginScanner.getInjectionClassLoader();
 
     /**
@@ -26,6 +28,20 @@ public class MethodInjector {
                                        InjectionInfo injectionInfo) {
 
         try {
+            // 参数验证
+            if (methodNode == null) {
+                PrintUtils.warn("目标方法节点为null");
+                return false;
+            }
+            if (injectionInfo == null) {
+                PrintUtils.warn("注入信息为null");
+                return false;
+            }
+            if (!injectionInfo.isValid()) {
+                PrintUtils.warn("注入信息无效: " + injectionInfo.getInjectionId());
+                return false;
+            }
+
             PrintUtils.debug("开始Mixin注入: " + injectionInfo.getInjectionId());
 
             // 1. 加载源类字节码
@@ -60,7 +76,8 @@ public class MethodInjector {
             return BytecodeMerger.mergeMethodBody(methodNode, sourceMethod, injectionInfo);
 
         } catch (Exception e) {
-            PrintUtils.error("Mixin注入失败: " + injectionInfo.getInjectionId() + " - " + e.getMessage());
+            String injectionId = injectionInfo != null ? injectionInfo.getInjectionId() : "未知";
+            PrintUtils.error("Mixin注入失败: " + injectionId + " - " + e.getMessage());
             e.printStackTrace();
             return false;
         }
@@ -73,10 +90,10 @@ public class MethodInjector {
         try {
             // 使用统一类加载器获取资源
             String resourcePath = className + ".class";
-            InputStream is = classLoader.getResourceAsStream(resourcePath);
+            InputStream is = CLASS_LOADER.getResourceAsStream(resourcePath);
 
             if (is != null) {
-                byte[] bytes = is.readAllBytes();
+                byte[] bytes = ByteStreams.toByteArray(is);
                 is.close();
                 return bytes;
             }

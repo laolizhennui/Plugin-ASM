@@ -97,6 +97,14 @@ public class BytecodeMerger {
             return false;
         }
 
+        // 计算临时变量索引（只计算一次，避免多次增加maxLocals）
+        int tmpVar = targetMethod.maxLocals;
+        if (!isVoid) {
+            // 根据返回类型计算需要的槽位数
+            int slotsNeeded = returnType.getSize();
+            targetMethod.maxLocals += slotsNeeded;
+        }
+
         // 为每个return位置生成插入指令
         for (AbstractInsnNode returnNode : returnNodes) {
             InsnList injectBlock = new InsnList();
@@ -104,9 +112,6 @@ public class BytecodeMerger {
             if (!isVoid) {
                 // 非void方法：需要保存返回值
                 // 1. 将栈顶返回值存入临时局部变量
-                int tmpVar = targetMethod.maxLocals; // 使用新的局部变量索引
-                targetMethod.maxLocals += 1;          // 增加局部变量槽计数
-
                 // 根据返回类型生成存储指令
                 int storeOpcode;
                 switch (returnType.getSort()) {
@@ -122,20 +127,15 @@ public class BytecodeMerger {
                         break;
                     case Type.LONG:
                         storeOpcode = Opcodes.LSTORE;
-                        tmpVar = targetMethod.maxLocals;
-                        targetMethod.maxLocals += 2;
                         break;
                     case Type.DOUBLE:
                         storeOpcode = Opcodes.DSTORE;
-                        tmpVar = targetMethod.maxLocals;
-                        targetMethod.maxLocals += 2;
                         break;
                     case Type.OBJECT:
                     case Type.ARRAY:
-                        storeOpcode = Opcodes.ASTORE;
-                        break;
                     default:
                         storeOpcode = Opcodes.ASTORE;
+                        break;
                 }
                 injectBlock.add(new VarInsnNode(storeOpcode, tmpVar));
 
@@ -217,6 +217,34 @@ public class BytecodeMerger {
                                 new TryCatchBlockNode(start, end, handler, obj.type));
                     } else {
                         PrintUtils.warn("异常表标签映射丢失，跳过该异常块");
+                    }
+                }
+            }
+
+            // 复制局部变量表
+            if (sourceMethod.localVariables != null) {
+                targetMethod.localVariables = new ArrayList<>();
+                for (LocalVariableNode lv : sourceMethod.localVariables) {
+                    LabelNode start = labelMap.get(lv.start);
+                    LabelNode end = labelMap.get(lv.end);
+                    if (start != null && end != null) {
+                        // 计算新的局部变量索引
+                        int newIndex = lv.index;
+                        boolean sourceIsStatic = (sourceMethod.access & Opcodes.ACC_STATIC) != 0;
+                        boolean targetIsStatic = (targetMethod.access & Opcodes.ACC_STATIC) != 0;
+                        if (!sourceIsStatic && !targetIsStatic) {
+                            // 两者都是非静态，索引不变
+                        } else if (sourceIsStatic && !targetIsStatic) {
+                            // 源是静态，目标是非静态，索引+1（因为目标有this指针）
+                            newIndex += 1;
+                        } else if (!sourceIsStatic && targetIsStatic) {
+                            // 源是非静态，目标是静态，索引-1（因为目标没有this指针）
+                            newIndex -= 1;
+                        }
+                        // 两者都是静态，索引不变
+                        LocalVariableNode newLv = new LocalVariableNode(
+                                lv.name, lv.desc, lv.signature, start, end, newIndex);
+                        targetMethod.localVariables.add(newLv);
                     }
                 }
             }

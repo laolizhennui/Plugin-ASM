@@ -1,5 +1,8 @@
 package net.laoli.pasm.model;
 
+/**
+ * @author laoli
+ */
 public class AsmProcessorInfo {
     private final String className;      // 全限定类名
     private final int priority;          // 优先级，越小越优先

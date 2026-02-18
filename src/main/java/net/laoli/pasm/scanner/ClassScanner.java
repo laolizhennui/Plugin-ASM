@@ -12,6 +12,9 @@ import java.util.Map;
 import static net.laoli.pasm.scanner.PluginScanner.INJECT_ANNOTATION_DESC;
 import static net.laoli.pasm.scanner.PluginScanner.PASM_ANNOTATION_DESC;
 
+/**
+ * @author laoli
+ */
 public class ClassScanner {
     /**
      * 使用ASM扫描单个类字节码中的@Pasm和@Inject注解

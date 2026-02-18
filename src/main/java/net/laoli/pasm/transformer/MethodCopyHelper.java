@@ -1,7 +1,5 @@
 package net.laoli.pasm.transformer;
 
-import net.laoli.pasm.model.AsmProcessorInfo;
-import net.laoli.pasm.model.InjectionInfo;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
 import org.objectweb.asm.tree.*;
@@ -10,6 +8,7 @@ import java.util.*;
 
 /**
  * 字节码复制辅助类 - 处理指令复制、索引偏移、标签映射
+ * @author laoli
  */
 public class MethodCopyHelper {
 
@@ -35,14 +34,11 @@ public class MethodCopyHelper {
         // ----- 2. 计算目标方法的局部变量布局 -----
         boolean targetIsStatic = (targetMethod.access & Opcodes.ACC_STATIC) != 0;
         int targetParamStart = targetIsStatic ? 0 : 1;
-        int[] targetParamIndices = new int[argTypes.length];
         curSlot = targetParamStart;
         for (int i = 0; i < argTypes.length; i++) {
-            targetParamIndices[i] = curSlot;
             curSlot += paramSlots[i];
         }
-        int targetParamEnd = curSlot;
-        int targetLocalStart = targetParamEnd;
+        int targetLocalStart = curSlot;
 
         // ----- 3. 构建局部变量索引映射表 -----
         // 注意：我们只需要为源方法中出现的局部变量索引建立映射，
@@ -73,7 +69,6 @@ public class MethodCopyHelper {
                 VarInsnNode var = (VarInsnNode) insn;
                 int newIndex = mapLocalIndex(var.var,
                         sourceParamStart, sourceParamEnd, sourceLocalStart,
-                        targetParamStart, targetParamEnd, targetLocalStart,
                         paramOffset, localOffset);
                 clone = new VarInsnNode(var.getOpcode(), newIndex);
             }
@@ -81,7 +76,6 @@ public class MethodCopyHelper {
                 IincInsnNode iinc = (IincInsnNode) insn;
                 int newIndex = mapLocalIndex(iinc.var,
                         sourceParamStart, sourceParamEnd, sourceLocalStart,
-                        targetParamStart, targetParamEnd, targetLocalStart,
                         paramOffset, localOffset);
                 clone = new IincInsnNode(newIndex, iinc.incr);
             }
@@ -100,7 +94,6 @@ public class MethodCopyHelper {
      */
     private static int mapLocalIndex(int sourceIndex,
                                      int sourceParamStart, int sourceParamEnd, int sourceLocalStart,
-                                     int targetParamStart, int targetParamEnd, int targetLocalStart,
                                      int paramOffset, int localOffset) {
         if (sourceIndex >= sourceParamStart && sourceIndex < sourceParamEnd) {
             // 参数区：直接整体偏移（因为参数顺序、类型完全一致）
@@ -109,7 +102,7 @@ public class MethodCopyHelper {
             // 非参数局部变量区：整体偏移
             return sourceIndex + localOffset;
         } else {
-            // 理论上不会走到这里（比如 this 指针），但保留原值
+            // 处理this指针：如果目标方法是非静态的，且源方法是静态的，需要调整索引
             return sourceIndex;
         }
     }

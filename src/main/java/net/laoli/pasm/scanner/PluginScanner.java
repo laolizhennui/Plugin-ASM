@@ -1,5 +1,6 @@
 package net.laoli.pasm.scanner;
 
+import com.google.common.io.ByteStreams;
 import net.laoli.pasm.loader.InjectionClassLoader;
 import net.laoli.pasm.model.AsmProcessorInfo;
 import net.laoli.pasm.model.InjectionInfo;
@@ -21,10 +22,76 @@ import static net.laoli.pasm.scanner.ClassScanner.scanClass;
  */
 public class PluginScanner {
     private static InjectionClassLoader injectionClassLoader;
-    private static final String PLUGINS_DIR = "./plugins";
+    private static String PLUGINS_DIR = "./plugins"; // 默认值
     private static final String CONFIG_FILE = "pasm.json";
+    private static final String AGENT_CONFIG_FILE = "pasm.json";
     static final String PASM_ANNOTATION_DESC = "Lnet/laoli/pasm/annotation/Pasm;";
     static final String INJECT_ANNOTATION_DESC = "Lnet/laoli/pasm/annotation/Inject;";
+
+    // 静态初始化块，读取JavaAgent同级目录下的pasm.json配置文件
+    static {
+        try {
+            // 获取当前类的位置，即JavaAgent的位置
+            String agentPath = PluginScanner.class.getProtectionDomain().getCodeSource().getLocation().getPath();
+            File agentFile = new File(agentPath);
+            File agentDir = agentFile.getParentFile();
+            
+            // 读取JavaAgent同级目录下的pasm.json配置文件
+            File agentConfigFile = new File(agentDir, AGENT_CONFIG_FILE);
+            if (agentConfigFile.exists() && agentConfigFile.isFile()) {
+                PrintUtils.debug("读取JavaAgent配置文件: " + agentConfigFile.getAbsolutePath());
+                
+                // 读取配置文件内容
+                String configContent = new String(java.nio.file.Files.readAllBytes(agentConfigFile.toPath()));
+                JsonElement jsonElement = JsonParser.parseString(configContent);
+                
+                if (jsonElement.isJsonObject()) {
+                    JsonObject config = jsonElement.getAsJsonObject();
+                    // 从配置文件中读取插件目录
+                    if (config.has("pluginsDir")) {
+                        JsonElement pluginsDirElement = config.get("pluginsDir");
+                        if (pluginsDirElement.isJsonPrimitive() && pluginsDirElement.getAsJsonPrimitive().isString()) {
+                            String pluginsDir = pluginsDirElement.getAsString().trim();
+                            if (!pluginsDir.isEmpty()) {
+                                PLUGINS_DIR = pluginsDir;
+                                PrintUtils.debug("从配置文件读取插件目录: " + PLUGINS_DIR);
+                            }
+                        }
+                    }
+                }
+            } else {
+                PrintUtils.debug("未找到JavaAgent配置文件: " + agentConfigFile.getAbsolutePath());
+                // 自动生成配置文件
+                generateDefaultConfigFile(agentConfigFile);
+            }
+        } catch (Exception e) {
+            PrintUtils.warn("读取JavaAgent配置文件失败: " + e.getMessage());
+        }
+
+    }
+
+    /**
+     * 生成默认的配置文件
+     */
+    private static void generateDefaultConfigFile(File configFile) {
+        try {
+            // 创建默认配置对象
+            JsonObject defaultConfig = new JsonObject();
+            defaultConfig.addProperty("pluginsDir", "./plugins");
+            
+            // 生成格式化的JSON字符串
+            Gson gson = new GsonBuilder().setPrettyPrinting().create();
+            String jsonContent = gson.toJson(defaultConfig);
+            
+            // 写入配置文件
+            java.nio.file.Files.write(configFile.toPath(), jsonContent.getBytes());
+            
+            PrintUtils.info("自动生成默认配置文件: " + configFile.getAbsolutePath());
+            PrintUtils.info("默认插件目录设置为: ./plugins");
+        } catch (Exception e) {
+            PrintUtils.error("生成默认配置文件失败: " + e.getMessage());
+        }
+    }
 
     /**
      * 按目标类分组注入信息
@@ -91,9 +158,6 @@ public class PluginScanner {
             injectionClassLoader = new InjectionClassLoader(
                     Thread.currentThread().getContextClassLoader()
             );
-
-            // 允许PASM框架包
-            injectionClassLoader.allowPackage("net.laoli.pasm.");
 
             PrintUtils.debug("初始化统一类加载器完成");
         }
@@ -186,47 +250,54 @@ public class PluginScanner {
             }
 
             // 读取配置
-            try (InputStream is = jar.getInputStream(configEntry)) {
-                String configContent = new String(is.readAllBytes());
-                JsonObject config = JsonParser.parseString(configContent).getAsJsonObject();
+            try (InputStream inputStream = jar.getInputStream(configEntry)) {
+                String configContent = new String(ByteStreams.toByteArray(inputStream));
+                JsonElement jsonElement = JsonParser.parseString(configContent);
+                
+                if (!jsonElement.isJsonObject()) {
+                    PrintUtils.warn("配置文件格式错误: 根元素必须是JSON对象");
+                    return Pair.create(injections, asmProcessors);
+                }
+                
+                JsonObject config = jsonElement.getAsJsonObject();
 
                 if (config.has("pasms")) {
-                    JsonArray pasmsArray = config.getAsJsonArray("pasms");
-                    List<String> classesToScan = new ArrayList<>();
+                    JsonElement pasmsElement = config.get("pasms");
+                    if (pasmsElement.isJsonArray()) {
+                        JsonArray pasmsArray = pasmsElement.getAsJsonArray();
+                        List<String> classesToScan = new ArrayList<>();
 
-                    // 解析类名
-                    for (JsonElement element : pasmsArray) {
-                        String[] classNames = element.getAsString().split(",\\s*");
-                        for (String className : classNames) {
-                            if (!className.trim().isEmpty()) {
-                                classesToScan.add(className.trim());
+                        // 解析类名
+                        for (JsonElement element : pasmsArray) {
+                            if (element.isJsonPrimitive() && element.getAsJsonPrimitive().isString()) {
+                                String[] classNames = element.getAsString().split(",\\s*");
+                                for (String className : classNames) {
+                                    if (!className.trim().isEmpty()) {
+                                        classesToScan.add(className.trim());
+                                    }
+                                }
+                            } else {
+                                PrintUtils.warn("pasms数组元素必须是字符串");
                             }
                         }
-                    }
 
-                    // 使用统一类加载器加载类
-                    for (String className : classesToScan) {
-                        try {
-                            // 读取类字节码用于ASM分析
+                        for (String className : classesToScan) {
                             String classFilePath = className.replace('.', '/') + ".class";
                             JarEntry classEntry = jar.getJarEntry(classFilePath);
-
-                            if (classEntry != null) {
-                                try (InputStream classIs = jar.getInputStream(classEntry)) {
-                                    byte[] classBytes = classIs.readAllBytes();
-
-                                    // 使用ASM分析类
-                                    List<InjectionInfo> classInjections = scanClass(
-                                            classBytes
-                                    );
-
-                                    injections.addAll(classInjections);
-                                }
+                            if (classEntry == null) {
+                                PrintUtils.warn("类文件不存在: " + classFilePath);
+                                continue;
                             }
-
-                        } catch (Exception e) {
-                            PrintUtils.warn("扫描类失败: " + className + " - " + e.getMessage());
+                            try (InputStream classInputStream = jar.getInputStream(classEntry)) {
+                                byte[] classBytes = ByteStreams.toByteArray(classInputStream);
+                                List<InjectionInfo> classInjections = scanClass(classBytes);
+                                injections.addAll(classInjections);
+                            } catch (Exception e) {
+                                PrintUtils.warn("扫描类失败: " + className + " - " + e.getMessage());
+                            }
                         }
+                    } else {
+                        PrintUtils.warn("pasms必须是JSON数组");
                     }
                 }
 
@@ -235,7 +306,7 @@ public class PluginScanner {
                     if (asmsElement.isJsonArray()) {
                         JsonArray asmsArray = asmsElement.getAsJsonArray();
                         for (JsonElement elem : asmsArray) {
-                            if (elem.isJsonPrimitive()) {
+                            if (elem.isJsonPrimitive() && elem.getAsJsonPrimitive().isString()) {
                                 // 格式1：纯字符串 -> 默认优先级 1000
                                 String className = elem.getAsString().trim();
                                 if (!className.isEmpty()) {
@@ -245,14 +316,37 @@ public class PluginScanner {
                                 // 格式2：对象
                                 JsonObject obj = elem.getAsJsonObject();
                                 if (obj.has("class")) {
-                                    String className = obj.get("class").getAsString().trim();
-                                    int priority = obj.has("priority") ? obj.get("priority").getAsInt() : 1000;
-                                    asmProcessors.add(new AsmProcessorInfo(className, priority));
+                                    JsonElement classElement = obj.get("class");
+                                    if (classElement.isJsonPrimitive() && classElement.getAsJsonPrimitive().isString()) {
+                                        String className = classElement.getAsString().trim();
+                                        int priority = 1000;
+                                        if (obj.has("priority")) {
+                                            JsonElement priorityElement = obj.get("priority");
+                                            if (priorityElement.isJsonPrimitive() && priorityElement.getAsJsonPrimitive().isNumber()) {
+                                                priority = priorityElement.getAsInt();
+                                            } else {
+                                                PrintUtils.warn("priority必须是数字");
+                                            }
+                                        }
+                                        if (!className.isEmpty()) {
+                                            asmProcessors.add(new AsmProcessorInfo(className, priority));
+                                        }
+                                    } else {
+                                        PrintUtils.warn("class必须是字符串");
+                                    }
+                                } else {
+                                    PrintUtils.warn("ASM处理器配置缺少class字段");
                                 }
+                            } else {
+                                PrintUtils.warn("asms数组元素必须是字符串或对象");
                             }
                         }
+                    } else {
+                        PrintUtils.warn("asms必须是JSON数组");
                     }
                 }
+            } catch (JsonSyntaxException e) {
+                PrintUtils.warn("配置文件语法错误: " + e.getMessage());
             }
         }
 

@@ -1,5 +1,9 @@
 package net.laoli.pasm.annotation;
 
+/**
+ * @author laoli
+ */
+
 public enum InjectionType {
     BEFORE,      // 方法开始处注入
     AFTER,       // 方法返回前注入

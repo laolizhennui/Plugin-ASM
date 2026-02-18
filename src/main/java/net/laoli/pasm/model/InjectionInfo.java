@@ -1,7 +1,11 @@
 package net.laoli.pasm.model;
 
+import com.google.common.base.Joiner;
 import net.laoli.pasm.annotation.InjectionType;
 
+/**
+ * @author laoli
+ */
 public class InjectionInfo {
     private final String targetClass;      // 目标类名（内部名）
     private final String targetMethod;     // 目标方法名
@@ -75,9 +79,9 @@ public class InjectionInfo {
      * 获取注入点的唯一标识
      */
     public String getInjectionId() {
-        return String.format("%s.%s%s->%s.%s%s",
-                targetClass, targetMethod, targetDesc,
-                sourceClass, sourceMethod, sourceDesc);
+        return Joiner.on("->").join(
+                targetClass + "." + targetMethod + targetDesc,
+                sourceClass + "." + sourceMethod + sourceDesc);
     }
 
     @Override
